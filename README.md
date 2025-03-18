@@ -3,5 +3,5 @@
 ## Visualization
 
 ```shell
-gs view urdf/gem/urdf/gem.urdf
+gs view assets/gem/assets/gem.assets
 ```
