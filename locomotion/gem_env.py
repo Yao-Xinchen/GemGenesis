@@ -11,11 +11,14 @@ from gem_ackermann import GemAckermann
 def gs_rand_float(lower, upper, shape, device):
     return (upper - lower) * torch.rand(size=shape, device=device) + lower
 
+
 r2d = 180.0 / math.pi
 d2r = math.pi / 180.0
 
+
 class GemEnv:
-    def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, show_viewer=False, device="cuda"):
+    def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, action_cfg, show_viewer=False,
+                 device="cuda"):
         self.device = torch.device(device)
 
         self.locomotion = GemAckermann(wheel_diameter=0.59, wheel_base=1.75, steer_dist_half=0.6, device=device)
@@ -34,6 +37,7 @@ class GemEnv:
         self.obs_cfg = obs_cfg
         self.reward_cfg = reward_cfg
         self.command_cfg = command_cfg
+        self.action_cfg = action_cfg
 
         self.obs_scales = obs_cfg["obs_scales"]
         self.reward_scales = reward_cfg["reward_scales"]
@@ -174,8 +178,8 @@ class GemEnv:
         self.actions = torch.clip(actions, -self.env_cfg["clip_actions"], self.env_cfg["clip_actions"])
 
         # control the gem
-        self.steering = actions[:, 0]
-        self.speed = actions[:, 1]
+        self.steering = actions[:, 0] * self.action_cfg["action_scales"]["steering"]
+        self.speed = actions[:, 1] * self.action_cfg["action_scales"]["velocity"]
         self.outputs = self.locomotion.control(steering=self.steering, velocity=self.speed)
         self.gem.control_dofs_position(self.outputs[:, :2], self.pos_idx)
         self.gem.control_dofs_velocity(self.outputs[:, 2:], self.vel_idx)
@@ -225,11 +229,11 @@ class GemEnv:
 
         self.obs_buf = torch.cat(
             [
-                self.rel_pos[:, :2] * self.obs_scales["rel_pos"], # 2
-                self.last_rel_pos[:, :2] * self.obs_scales["rel_pos"], # 2
-                self.rel_yaw.unsqueeze(1) * self.obs_scales["rel_yaw"], # 1
-                torch.norm(self.base_lin_vel, dim=1).unsqueeze(1) * self.obs_scales["lin_vel"], # 1
-                self.base_ang_vel[:, 2].unsqueeze(1) * self.obs_scales["ang_vel"], # 1
+                self.rel_pos[:, :2] * self.obs_scales["rel_pos"],  # 2
+                self.last_rel_pos[:, :2] * self.obs_scales["rel_pos"],  # 2
+                self.rel_yaw.unsqueeze(1) * self.obs_scales["rel_yaw"],  # 1
+                torch.norm(self.base_lin_vel, dim=1).unsqueeze(1) * self.obs_scales["lin_vel"],  # 1
+                self.base_ang_vel[:, 2].unsqueeze(1) * self.obs_scales["ang_vel"],  # 1
             ],
             dim=-1,
         )
@@ -308,5 +312,10 @@ class GemEnv:
     def _reward_crash(self):
         crash_rew = -self.crash_condition.float()
         return crash_rew
+
+    def _reward_still(self):
+        # penalize for not moving
+        still_rew = (torch.norm(self.base_lin_vel, dim=1) + 0.5) ** -2
+        return still_rew
 
     # TODO
