@@ -108,7 +108,7 @@ def main():
     parser.add_argument("--max_iterations", type=int, default=1000)
     args = parser.parse_args()
 
-    gs.init()
+    gs.init(logging_level="error")
 
     log_dir = f"logs/{args.exp_name}"
     env_cfg, obs_cfg, reward_cfg, command_cfg = get_cfgs()
