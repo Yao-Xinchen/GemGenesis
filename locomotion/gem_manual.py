@@ -5,6 +5,7 @@ from pynput import keyboard
 
 from gem_ackermann import GemAckermann
 
+
 class Controller:
     def __init__(self):
         self.running = True
@@ -44,6 +45,7 @@ class Controller:
         if keyboard.Key.right in self.pressed_keys:
             steering -= self.steering_sens
         return steering, speed
+
 
 def main():
     gs.init(backend=gs.cpu)
@@ -136,6 +138,7 @@ def main():
     if scene.viewer:
         scene.viewer.stop()
     listener.stop()
+
 
 if __name__ == "__main__":
     main()
