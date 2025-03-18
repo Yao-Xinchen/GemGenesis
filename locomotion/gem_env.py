@@ -11,6 +11,8 @@ from gem_ackermann import GemAckermann
 def gs_rand_float(lower, upper, shape, device):
     return (upper - lower) * torch.rand(size=shape, device=device) + lower
 
+r2d = 180.0 / math.pi
+d2r = math.pi / 180.0
 
 class GemEnv:
     def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, show_viewer=False, device="cuda"):
@@ -90,6 +92,11 @@ class GemEnv:
         self.base_init_quat = torch.tensor(self.env_cfg["base_init_quat"], device=self.device)
         self.inv_base_init_quat = inv_quat(self.base_init_quat)
         self.gem = self.scene.add_entity(gs.morphs.URDF(file="assets/gem/urdf/gem.urdf"))
+
+        # build scene
+        self.scene.build(n_envs=num_envs)
+
+        # set gains
         pos_joints = [
             "left_steering_hinge_joint",
             "right_steering_hinge_joint",
@@ -107,9 +114,6 @@ class GemEnv:
         kv_tensor = torch.tensor([5., 5., 30., 30., 30., 30.], device=device)
         self.gem.set_dofs_kp(kp=kp_tensor, dofs_idx_local=joint_idx)
         self.gem.set_dofs_kv(kv=kv_tensor, dofs_idx_local=joint_idx)
-
-        # build scene
-        self.scene.build(n_envs=num_envs)
 
         # prepare reward functions and multiply reward scales by dt
         self.reward_functions, self.episode_sums = dict(), dict()
@@ -147,9 +151,9 @@ class GemEnv:
 
     def _resample_commands(self, envs_idx):
         # command [x, y, orientation]
-        self.commands[envs_idx, 0] = gs_rand_float(*self.command_cfg["pos_x_range"], (envs_idx.sum(),), self.device)
-        self.commands[envs_idx, 1] = gs_rand_float(*self.command_cfg["pos_y_range"], (envs_idx.sum(),), self.device)
-        self.commands[envs_idx, 2] = gs_rand_float(-torch.pi, torch.pi, (envs_idx.sum(),), self.device)
+        self.commands[envs_idx, 0] = gs_rand_float(*self.command_cfg["pos_x_range"], (len(envs_idx),), self.device)
+        self.commands[envs_idx, 1] = gs_rand_float(*self.command_cfg["pos_y_range"], (len(envs_idx),), self.device)
+        self.commands[envs_idx, 2] = gs_rand_float(-torch.pi, torch.pi, (len(envs_idx),), self.device)
 
         if self.target is not None:
             zeros = torch.zeros_like(self.commands[envs_idx, 0])
@@ -158,23 +162,23 @@ class GemEnv:
             self.target.set_pos(pos, zero_velocity=True, envs_idx=envs_idx)
             # orientation
             euler = torch.stack([zeros, zeros, self.commands[envs_idx, 2]], dim=1)
-            self.target.set_quat(xyz_to_quat(euler, degrees=False), zero_velocity=True, envs_idx=envs_idx)
+            self.target.set_quat(xyz_to_quat(euler * r2d), zero_velocity=True, envs_idx=envs_idx)
 
     def _at_target(self):
-        gem_pos = self.base_pos
-        target_pos = self.target.get_pos()
-        return torch.norm(gem_pos - target_pos, dim=1) < 0.3
+        at_target = (
+            (torch.norm(self.rel_pos, dim=1) < self.env_cfg["at_target_threshold"]).nonzero(as_tuple=False).flatten()
+        )
+        return at_target
 
     def step(self, actions):
         self.actions = torch.clip(actions, -self.env_cfg["clip_actions"], self.env_cfg["clip_actions"])
-        exec_actions = self.actions
 
         # control the gem
         self.steering = actions[:, 0]
         self.speed = actions[:, 1]
         self.outputs = self.locomotion.control(steering=self.steering, velocity=self.speed)
-        self.gem.control_dofs_position(self.outputs[0, :2], self.pos_idx)
-        self.gem.control_dofs_velocity(self.outputs[0, 2:], self.vel_idx)
+        self.gem.control_dofs_position(self.outputs[:, :2], self.pos_idx)
+        self.gem.control_dofs_velocity(self.outputs[:, 2:], self.vel_idx)
 
         # step the scene
         self.scene.step()
@@ -188,8 +192,7 @@ class GemEnv:
         self.base_quat[:] = self.gem.get_quat()
         self.base_euler = quat_to_xyz(
             transform_quat_by_quat(torch.ones_like(self.base_quat) * self.inv_base_init_quat, self.base_quat),
-            degrees=False
-        )
+        ) * d2r
         self.rel_yaw = (self.commands[:, 2] - self.base_euler[:, 2] + math.pi) % (2 * math.pi) - math.pi
         inv_base_quat = inv_quat(self.base_quat)
         self.base_lin_vel[:] = transform_by_quat(self.gem.get_vel(), inv_base_quat)
@@ -222,11 +225,11 @@ class GemEnv:
 
         self.obs_buf = torch.cat(
             [
-                self.rel_pos * self.obs_scales["rel_pos"],
-                self.last_rel_pos * self.obs_scales["rel_pos"],
-                self.rel_yaw.unsqueeze(1) * self.obs_scales["rel_yaw"],
-                self.base_lin_vel,
-                self.base_ang_vel,
+                self.rel_pos[:, :2] * self.obs_scales["rel_pos"], # 2
+                self.last_rel_pos[:, :2] * self.obs_scales["rel_pos"], # 2
+                self.rel_yaw.unsqueeze(1) * self.obs_scales["rel_yaw"], # 1
+                torch.norm(self.base_lin_vel, dim=1).unsqueeze(1) * self.obs_scales["lin_vel"], # 1
+                self.base_ang_vel[:, 2].unsqueeze(1) * self.obs_scales["ang_vel"], # 1
             ],
             dim=-1,
         )
