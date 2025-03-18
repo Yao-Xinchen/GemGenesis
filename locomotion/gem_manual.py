@@ -1,4 +1,4 @@
-import numpy as np
+import torch
 import genesis as gs
 import time
 from pynput import keyboard
@@ -48,7 +48,10 @@ class Controller:
 
 
 def main():
-    gs.init(backend=gs.cpu)
+    # Use CUDA if available, otherwise fall back to CPU
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    gs.init(backend=gs.cuda if torch.cuda.is_available() else gs.cpu)
+
     # Create the scene
     scene = gs.Scene(
         viewer_options=gs.options.ViewerOptions(
@@ -89,21 +92,21 @@ def main():
     ]
     vel_idx = [gem.get_joint(name).dof_idx_local for name in vel_joints]
 
-    joint_names = pos_joints + vel_joints
     joint_idx = pos_idx + vel_idx
 
+    kp_tensor = torch.tensor([35., 35., 0., 0., 0., 0.], device=device)
+    kv_tensor = torch.tensor([5., 5., 30., 30., 30., 30.], device=device)
+
     # Set the gains for the joints
-    gem.set_dofs_kp(
-        kp=np.array([35., 35., 0., 0., 0., 0.]),
-        dofs_idx_local=joint_idx,
-    )
-    gem.set_dofs_kv(
-        kv=np.array([5., 5., 30., 30., 30., 30.]),
-        dofs_idx_local=joint_idx,
-    )
+    gem.set_dofs_kp(kp=kp_tensor, dofs_idx_local=joint_idx)
+    gem.set_dofs_kv(kv=kv_tensor, dofs_idx_local=joint_idx)
 
     # Create the locomotion controller
-    locomotion = GemAckermann(wheel_diameter=0.59, wheel_base=1.75, steer_dist_half=0.6)
+    locomotion = GemAckermann(wheel_diameter=0.59, wheel_base=1.75, steer_dist_half=0.6, device=device)
+
+    # Pre-allocate tensors for better performance
+    steering = torch.zeros(1, device=device)
+    speed = torch.zeros(1, device=device)
 
     # Create the controller
     controller = Controller()
@@ -123,21 +126,27 @@ def main():
     )
     listener.start()
 
-    while controller.running:
-        try:
-            steering, speed = controller.update()
+    try:
+        while controller.running:
+            # Get control inputs
+            steering_val, speed_val = controller.update()
+
+            steering[0] = steering_val
+            speed[0] = speed_val
+
             outputs = locomotion.control(steering, speed)
-            gem.control_dofs_position(outputs[:2], pos_idx)
-            gem.control_dofs_velocity(outputs[2:], vel_idx)
+
+            gem.control_dofs_position(outputs[0, :2], pos_idx)
+            gem.control_dofs_velocity(outputs[0, 2:], vel_idx)
 
             scene.step()
-            time.sleep(1 / 60)  # Limit simulation rate
-        except Exception as e:
-            print(f"Error in simulation loop: {e}")
-
-    if scene.viewer:
-        scene.viewer.stop()
-    listener.stop()
+            time.sleep(1 / 60)
+    except Exception as e:
+        print(f"Error in simulation loop: {e}")
+    finally:
+        if scene.viewer:
+            scene.viewer.stop()
+        listener.stop()
 
 
 if __name__ == "__main__":
