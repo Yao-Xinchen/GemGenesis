@@ -199,10 +199,15 @@ class GemEnv:
         base_pos = gs_rand_float(
             self.env_cfg["base_x_range"][0], self.env_cfg["base_x_range"][1], (num, 2), self.device
         ) * gs_rand_sign((num, 2), self.device)
-        self.base_pos[envs_idx] = torch.cat([base_pos, self.zeros], dim=1)
+        self.base_pos[envs_idx] = torch.cat([base_pos, torch.zeros((num, 1), device=self.device)], dim=1)
 
         base_yaw = gs_rand_float(-math.pi, math.pi, (num, 1), self.device)
-        self.base_quat[envs_idx] = xyz_to_quat(torch.cat([self.zeros, self.zeros, base_yaw * r2d], dim=1))
+        self.base_quat[envs_idx] = xyz_to_quat(
+            torch.cat([
+                torch.zeros((num, 2), device=self.device),
+                base_yaw * r2d
+            ], dim=1)
+        )
 
         self.inv_base_quat = inv_quat(self.base_quat)
 
@@ -386,6 +391,3 @@ class GemEnv:
 
     def _reward_incline(self):
         return torch.norm(self.base_euler[:, :2], dim=1)
-
-    def _reward_crash(self):
-        return self.crash_condition.float()

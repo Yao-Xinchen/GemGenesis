@@ -100,7 +100,6 @@ def get_cfgs():
             "smoothness": -0.1,
             "stillness": -2.0,
             "incline": -80.0,
-            "crash": -100.0,
         },
     }
     action_cfg = {
@@ -120,7 +119,7 @@ def get_cfgs():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-e", "--exp_name", type=str, default="gem")
-    parser.add_argument("-B", "--num_envs", type=int, default=8192)
+    parser.add_argument("-B", "--num_envs", type=int, default=4096)
     parser.add_argument("--max_iterations", type=int, default=1000)
     args = parser.parse_args()
 
