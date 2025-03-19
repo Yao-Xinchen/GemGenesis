@@ -6,13 +6,23 @@ from pynput import keyboard
 from gem_ackermann import GemAckermann
 
 
-class Controller:
+class ManualController:
     def __init__(self):
         self.running = True
         self.pressed_keys = set()
         self.steering_sens = 0.2
         self.speed_sens = 10.0
         self.debug = False
+
+        # Listen for keyboard events
+        self.listener = keyboard.Listener(
+            on_press=self.on_press,
+            on_release=self.on_release,
+        )
+        self.listener.start()
+
+    def __del__(self):
+        self.listener.stop()
 
     def on_press(self, key):
         try:
@@ -109,7 +119,7 @@ def main():
     speed = torch.zeros(1, device=device)
 
     # Create the controller
-    controller = Controller()
+    controller = ManualController()
     print(
         "Controls:\n"
         "↑: Forward\n"
@@ -118,13 +128,6 @@ def main():
         "→: Right\n"
         "ESC: Quit"
     )
-
-    # Listen for keyboard events
-    listener = keyboard.Listener(
-        on_press=controller.on_press,
-        on_release=controller.on_release,
-    )
-    listener.start()
 
     try:
         while controller.running:
@@ -146,7 +149,6 @@ def main():
     finally:
         if scene.viewer:
             scene.viewer.stop()
-        listener.stop()
 
 
 if __name__ == "__main__":
