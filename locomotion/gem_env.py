@@ -191,8 +191,8 @@ class GemEnv:
         self.episode_length_buf += 1
         self.last_base_pos[:] = self.base_pos[:]
         self.base_pos[:] = self.gem.get_pos()
-        self.rel_pos = self.commands[:, :2] - self.base_pos[:, :2]
-        self.last_rel_pos = self.commands[:, :2] - self.last_base_pos[:, :2]
+        self.rel_pos = self.commands - self.base_pos
+        self.last_rel_pos = self.commands - self.last_base_pos
         self.base_quat[:] = self.gem.get_quat()
         self.base_euler = quat_to_xyz(
             transform_quat_by_quat(torch.ones_like(self.base_quat) * self.inv_base_init_quat, self.base_quat),
@@ -229,7 +229,7 @@ class GemEnv:
             self.episode_sums[name] += rew
 
         rel_pos_for_gem = transform_by_quat(
-            torch.cat([self.rel_pos, torch.zeros((self.num_envs, 1), device=self.device)], dim=1),
+            torch.cat([self.rel_pos[:, :2], torch.zeros((self.num_envs, 1), device=self.device)], dim=1),
             inv_quat(self.base_quat),
         )
         norm_long = self.obs_cfg["obs_scales"]["rel_pos_long"]
