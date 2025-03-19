@@ -59,16 +59,16 @@ def get_cfgs():
     env_cfg = {
         "num_actions": 2,
         # termination
-        "termination_if_roll_greater_than": .3,  # rad
-        "termination_if_pitch_greater_than": .3,
+        "termination_if_roll_greater_than": .8,  # rad
+        "termination_if_pitch_greater_than": .8,
         "termination_if_x_greater_than": 100.0,
         "termination_if_y_greater_than": 100.0,
         # base pose
         "base_init_pos": [0.0, 0.0, 0.0],
         "base_init_quat": [1.0, 0.0, 0.0, 0.0],
-        "episode_length_s": 10.0,
+        "episode_length_s": 30.0,
         "at_target_threshold": 0.6,
-        "resampling_time_s": 10.0,
+        # "resampling_time_s": 30.0,
         "simulate_action_latency": True,
         "clip_actions": 1.0,
         # visualization
@@ -79,10 +79,11 @@ def get_cfgs():
     obs_cfg = {
         "num_obs": 7,
         "obs_scales": {
-            "rel_pos": 1 / 3.0,
-            "lin_vel": 1 / 3.0,
-            "ang_vel": 1 / 3.14159,
-            "rel_yaw": 1 / 3.14159,
+            "rel_pos_long": 25,
+            "rel_pos_short": 5,
+            "lin_vel": 0.15,
+            "ang_vel": 1.2,
+            "rel_yaw_cos_square": 1.0,
         },
     }
     reward_cfg = {
@@ -91,12 +92,13 @@ def get_cfgs():
             "perp_dist_reduction": 1.0,
             "heading_target": 3.0,
             "alignment": 5.0,
-            "success": 100.0,
+            "success": 500.0,
             "at_target": 10.0,
             "vel_at_target": -1.0,
             "smoothness": -0.1,
-            "stillness": -2.0,
-            "incline": -15.0,
+            "stillness": -5.0,
+            "incline": -40.0,
+            "crash": -100.0,
         },
     }
     command_cfg = {

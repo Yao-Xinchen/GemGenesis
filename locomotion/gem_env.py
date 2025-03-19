@@ -136,7 +136,7 @@ class GemEnv:
         self.rel_pos = torch.zeros((self.num_envs, 3), device=self.device, dtype=gs.tc_float)
         self.last_rel_pos = torch.zeros_like(self.rel_pos)
         self.base_euler = torch.zeros((self.num_envs, 3), device=self.device, dtype=gs.tc_float)
-        self.rel_yaw = torch.zeros((self.num_envs,), device=self.device, dtype=gs.tc_float)
+        self.rel_yaw_cos_square = torch.zeros((self.num_envs,), device=self.device, dtype=gs.tc_float)
         self.perp_dist = torch.zeros((self.num_envs,), device=self.device, dtype=gs.tc_float)
         self.last_perp_dist = torch.zeros_like(self.perp_dist)
 
@@ -170,12 +170,6 @@ class GemEnv:
             euler = torch.stack([zeros, zeros, self.commands[envs_idx, 2]], dim=1)
             self.target.set_quat(xyz_to_quat(euler * r2d), zero_velocity=True, envs_idx=envs_idx)
 
-    def _at_target(self):
-        at_target = (
-            (torch.norm(self.rel_pos, dim=1) < self.env_cfg["at_target_threshold"]).nonzero(as_tuple=False).flatten()
-        )
-        return at_target
-
     def step(self, actions):
         self.actions = torch.clip(actions, -self.env_cfg["clip_actions"], self.env_cfg["clip_actions"])
 
@@ -187,7 +181,7 @@ class GemEnv:
         max_speed = self.action_cfg["action_limits"]["velocity_max"]
         self.speed = torch.clip(self.speed, -max_speed, max_speed)
         self.outputs = self.locomotion.control(steering=self.steering, velocity=self.speed)
-        self.gem.control_dofs_position(self.outputs[:, :2],self.pos_idx)
+        self.gem.control_dofs_position(self.outputs[:, :2], self.pos_idx)
         self.gem.control_dofs_velocity(self.outputs[:, 2:], self.vel_idx)
 
         # step the scene
@@ -203,7 +197,7 @@ class GemEnv:
         self.base_euler = quat_to_xyz(
             transform_quat_by_quat(torch.ones_like(self.base_quat) * self.inv_base_init_quat, self.base_quat),
         ) * d2r
-        self.rel_yaw = (self.commands[:, 2] - self.base_euler[:, 2] + math.pi) % (2 * math.pi) - math.pi
+        self.rel_yaw_cos_square = torch.cos(self.commands[:, 2] - self.base_euler[:, 2]) ** 2
         inv_base_quat = inv_quat(self.base_quat)
         self.base_lin_vel[:] = transform_by_quat(self.gem.get_vel(), inv_base_quat)
         self.base_ang_vel[:] = transform_by_quat(self.gem.get_ang(), inv_base_quat)
@@ -218,8 +212,6 @@ class GemEnv:
         self.crash_condition = (
                 (torch.abs(self.base_euler[:, 1]) > self.env_cfg["termination_if_pitch_greater_than"])
                 | (torch.abs(self.base_euler[:, 0]) > self.env_cfg["termination_if_roll_greater_than"])
-                | (torch.abs(self.rel_pos[:, 0]) > self.env_cfg["termination_if_x_greater_than"])
-                | (torch.abs(self.rel_pos[:, 1]) > self.env_cfg["termination_if_y_greater_than"])
         )
         self.reset_buf = (self.episode_length_buf > self.max_episode_length) | self.crash_condition
 
@@ -236,11 +228,20 @@ class GemEnv:
             self.rew_buf += rew
             self.episode_sums[name] += rew
 
+        rel_pos_for_gem = transform_by_quat(
+            torch.cat([self.rel_pos, torch.zeros((self.num_envs, 1), device=self.device)], dim=1),
+            inv_quat(self.base_quat),
+        )
+        norm_long = self.obs_cfg["obs_scales"]["rel_pos_long"]
+        norm_short = self.obs_cfg["obs_scales"]["rel_pos_short"]
+        long_dist = torch.clip(rel_pos_for_gem[:, :2], -norm_long, norm_long) / norm_long
+        short_dist = torch.clip(rel_pos_for_gem[:, :2], -norm_short, norm_short) / norm_short
+
         self.obs_buf = torch.cat(
             [
-                self.rel_pos[:, :2] * self.obs_scales["rel_pos"],  # 2
-                self.last_rel_pos[:, :2] * self.obs_scales["rel_pos"],  # 2
-                self.rel_yaw.unsqueeze(1) * self.obs_scales["rel_yaw"],  # 1
+                long_dist,  # 2
+                short_dist,  # 2
+                self.rel_yaw_cos_square.unsqueeze(1) * self.obs_scales["rel_yaw_cos_square"],  # 1
                 torch.norm(self.base_lin_vel, dim=1).unsqueeze(1) * self.obs_scales["lin_vel"],  # 1
                 self.base_ang_vel[:, 2].unsqueeze(1) * self.obs_scales["ang_vel"],  # 1
             ],
@@ -286,9 +287,9 @@ class GemEnv:
         self.speed[envs_idx] = 0.0
         self.outputs[envs_idx] = 0.0
 
-        # Reset base euler and rel_yaw
+        # Reset base euler and rel yaw
         self.base_euler[envs_idx, :] = 0.0
-        self.rel_yaw = (self.commands[:, 2] - self.base_euler[:, 2] + math.pi) % (2 * math.pi) - math.pi
+        self.rel_yaw_cos_square = torch.cos(self.commands[:, 2] - self.base_euler[:, 2]) ** 2
 
         # fill extras
         self.extras["episode"] = {}
@@ -323,12 +324,11 @@ class GemEnv:
 
     def _reward_alignment(self):
         close_enough = torch.norm(self.rel_pos, dim=1) < self.env_cfg["at_target_threshold"] * 10
-        cos_rel = torch.cos(self.rel_yaw)
-        return cos_rel ** 2 * close_enough
+        return self.rel_yaw_cos_square * close_enough
 
     def _reward_success(self):
         pos_success = torch.norm(self.rel_pos, dim=1) < self.env_cfg["at_target_threshold"]
-        orient_success = torch.cos(self.rel_yaw) > 0.8
+        orient_success = self.rel_yaw_cos_square > 0.8
         return (pos_success & orient_success).float()
 
     def _reward_at_target(self):
@@ -346,3 +346,6 @@ class GemEnv:
 
     def _reward_incline(self):
         return torch.norm(self.base_euler[:, :2], dim=1)
+
+    def _reward_crash(self):
+        return self.crash_condition.float()
