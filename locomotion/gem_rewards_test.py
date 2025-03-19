@@ -16,61 +16,103 @@ from gem_manual import ManualController
 from gem_train import get_cfgs
 
 
-class RewardBarVisualizer:
-    def __init__(self, reward_names):
+class DualBarVisualizer:
+    def __init__(self, reward_names, obs_count):
         self.reward_names = reward_names
+        self.obs_count = obs_count
         self.reward_values = {name: 0.0 for name in reward_names}
+        self.obs_values = {f"obs_{i}": 0.0 for i in range(obs_count)}
 
         # Setup plot
         plt.ion()  # Interactive mode on
-        self.fig, self.ax = plt.subplots(figsize=(10, 6))
-        self.bars = self.ax.barh(reward_names, [0] * len(reward_names))
+        self.fig, (self.ax_reward, self.ax_obs) = plt.subplots(1, 2, figsize=(16, 8))
 
-        # Set colors for bars
-        colors = plt.cm.viridis(np.linspace(0, 1, len(reward_names)))
-        for bar, color in zip(self.bars, colors):
+        # Reward bars
+        self.reward_bars = self.ax_reward.barh(range(len(reward_names)), [0] * len(reward_names))
+        self.ax_reward.set_yticks(range(len(reward_names)))
+        self.ax_reward.set_yticklabels(reward_names)
+        self.ax_reward.set_xlim(-2, 2)
+        self.ax_reward.set_title('Reward Values')
+        self.ax_reward.grid(True, axis='x')
+
+        # Set colors for reward bars
+        reward_colors = plt.cm.viridis(np.linspace(0, 1, len(reward_names)))
+        for bar, color in zip(self.reward_bars, reward_colors):
             bar.set_color(color)
 
-        self.ax.set_xlim(-1, 1)  # Initial range, will adjust dynamically
-        self.ax.set_title('Real-time Reward Values')
-        self.ax.grid(True, axis='x')
+        # Observation bars
+        obs_labels = [f"obs_{i}" for i in range(obs_count)]
+        self.obs_bars = self.ax_obs.barh(range(obs_count), [0] * obs_count)
+        self.ax_obs.set_yticks(range(obs_count))
+        self.ax_obs.set_yticklabels(obs_labels)
+        self.ax_obs.set_xlim(-2, 2)
+        self.ax_obs.set_title('Observation Values')
+        self.ax_obs.grid(True, axis='x')
+
+        # Set colors for obs bars
+        obs_colors = plt.cm.plasma(np.linspace(0, 1, obs_count))
+        for bar, color in zip(self.obs_bars, obs_colors):
+            bar.set_color(color)
 
         # Add value labels on bars
-        self.labels = []
-        for bar in self.bars:
-            label = self.ax.text(
+        self.reward_labels = []
+        for bar in self.reward_bars:
+            label = self.ax_reward.text(
                 0.01,
                 bar.get_y() + bar.get_height() / 2,
                 '0.00',
                 va='center'
             )
-            self.labels.append(label)
+            self.reward_labels.append(label)
+
+        self.obs_labels = []
+        for bar in self.obs_bars:
+            label = self.ax_obs.text(
+                0.01,
+                bar.get_y() + bar.get_height() / 2,
+                '0.00',
+                va='center'
+            )
+            self.obs_labels.append(label)
 
         plt.tight_layout()
         plt.show(block=False)
 
-    def update(self, reward_values):
-        # Update stored values
+    def update(self, reward_values, obs_tensor):
+        # Update stored reward values
         for name, value in reward_values.items():
             if name in self.reward_values:
                 self.reward_values[name] = value
 
-        # Get values in correct order
-        values = [self.reward_values[name] for name in self.reward_names]
+        # Get reward values in correct order
+        reward_vals = [self.reward_values[name] for name in self.reward_names]
 
-        # Update bar heights
-        for bar, value in zip(self.bars, values):
+        # Update reward bar widths
+        for bar, value in zip(self.reward_bars, reward_vals):
             bar.set_width(value)
 
-        # Find min and max for adjusting the axis limits
-        min_val = min(values)
-        max_val = max(values)
+        # Update reward labels
+        min_val = min(reward_vals)
+        max_val = max(reward_vals)
         margin = max(0.001, (max_val - min_val) * 0.2)
-        self.ax.set_xlim(min(min_val - margin, -0.001), max(max_val + margin, 0.001))
+        self.ax_reward.set_xlim(min(min_val - margin, -0.001), max(max_val + margin, 0.001))
 
-        # Update labels
-        for label, value, bar in zip(self.labels, values, self.bars):
-            label.set_position((min(value, 0.01) if value < 0 else 0.01, bar.get_y() + bar.get_height() / 2))
+        for label, value, bar in zip(self.reward_labels, reward_vals, self.reward_bars):
+            position = min(value, 0.001) if value < 0 else 0.001
+            label.set_position((position, bar.get_y() + bar.get_height() / 2))
+            label.set_text(f"{value:.4f}")
+
+        # Update observation bars directly from tensor
+        obs_values = obs_tensor[0].cpu().tolist()  # Get first env's observations
+
+        # Update obs bar widths
+        for i, (bar, value) in enumerate(zip(self.obs_bars, obs_values)):
+            bar.set_width(value)
+
+            # Update obs label
+            label = self.obs_labels[i]
+            position = min(value, 0.01) if value < 0 else 0.01
+            label.set_position((position, bar.get_y() + bar.get_height() / 2))
             label.set_text(f"{value:.4f}")
 
         # Update the figure
@@ -110,9 +152,14 @@ def main():
 
     controller = ManualController()
 
-    # Initialize the reward visualizer with the names of reward functions
+    # Initialize the dual visualizer with names of reward functions and observation count
     reward_names = list(env.reward_functions.keys())
-    visualizer = RewardBarVisualizer(reward_names)
+
+    # Get sample observation to determine dimension
+    sample_obs = env.get_observations()
+    obs_dim = sample_obs.shape[1]
+
+    visualizer = DualBarVisualizer(reward_names, obs_dim)
 
     with torch.no_grad():
         while controller.running:
@@ -122,17 +169,15 @@ def main():
             actions = torch.tensor([steering, speed], device="cuda:0").unsqueeze(0)
             obs, _, rews, dones, infos = env.step(actions)
 
-            # Collect reward values
+            # Collect reward values with scales applied
             reward_values = {}
             for name, reward_func in env.reward_functions.items():
                 raw_value = reward_func()[0].item()
-                # Multiply by scale if available
-                if name in reward_cfg["reward_scales"]:
-                    scaled_value = raw_value * reward_cfg["reward_scales"][name]
-                    reward_values[name] = scaled_value
+                scale = reward_cfg["reward_scales"].get(name, 1.0)  # Default to 1.0 if no scale
+                reward_values[name] = raw_value * scale
 
-            # Update the visualization
-            visualizer.update(reward_values)
+            # Update the visualization with indexed observations
+            visualizer.update(reward_values, obs)
 
 
 if __name__ == "__main__":
