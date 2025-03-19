@@ -4,6 +4,7 @@ import genesis as gs
 from genesis.ext.trimesh.path.packing import visualize
 from genesis.utils.geom import xyz_to_quat, quat_to_xyz, transform_by_quat, inv_quat, transform_quat_by_quat
 from sympy.physics.units import degree
+from torch.onnx.symbolic_opset9 import unsqueeze
 
 from gem_ackermann import GemAckermann
 
@@ -89,12 +90,20 @@ class GemEnv:
         else:
             self.target = None
 
+        self.vertices = torch.tensor([
+            [2.0, 1.5, 0.0],  # front left
+            [2.0, -1.5, 0.0],  # front right
+            [-2.0, 1.5, 0.0],  # rear left
+            [-2.0, -1.5, 0.0],  # rear right
+        ], device=self.device, dtype=gs.tc_float)
+        self.vertices = torch.unsqueeze(self.vertices, dim=0).repeat(num_envs, 1, 1)  # [num_envs, 4, 3]
+
         # add obstacles
-        obstacle_left_x = gs_rand_float(
+        self.obstacle_left_x = gs_rand_float(
             self.env_cfg["obstacle_x_range"][0], self.env_cfg["obstacle_x_range"][1],
             (self.num_envs, 1), self.device
         ) * gs_rand_sign((self.num_envs, 1), self.device)
-        obstacle_left_y = gs_rand_float(
+        self.obstacle_left_y = gs_rand_float(
             self.env_cfg["obstacle_y_range"][0], self.env_cfg["obstacle_y_range"][1],
             (self.num_envs, 1), self.device
         )
@@ -108,8 +117,8 @@ class GemEnv:
             ),
         )
 
-        obstacle_right_x = - obstacle_left_x
-        obstacle_right_y = - obstacle_left_y
+        obstacle_right_x = - self.obstacle_left_x
+        obstacle_right_y = - self.obstacle_left_y
         self.obstacle_right = self.scene.add_entity(
             morph=gs.morphs.Box(
                 pos=(1.0, 0.0, 0.0),
@@ -136,7 +145,7 @@ class GemEnv:
         # build scene
         self.scene.build(n_envs=num_envs)
 
-        self.obstacle_left.set_pos(torch.cat([obstacle_left_x, obstacle_left_y, self.zeros + 0.75], dim=1))
+        self.obstacle_left.set_pos(torch.cat([self.obstacle_left_x, self.obstacle_left_y, self.zeros + 0.75], dim=1))
         self.obstacle_right.set_pos(torch.cat([obstacle_right_x, obstacle_right_y, self.zeros + 0.75], dim=1))
 
         # set gains
@@ -157,6 +166,16 @@ class GemEnv:
         kv_tensor = torch.tensor([5., 5., 30., 30., 30., 30.], device=device)
         self.gem.set_dofs_kp(kp=kp_tensor, dofs_idx_local=joint_idx)
         self.gem.set_dofs_kv(kv=kv_tensor, dofs_idx_local=joint_idx)
+
+        self.fl_wheel_rel_pos = (torch.tensor([0.6, 0.6, 0.0], device=self.device, dtype=gs.tc_float)
+                                 .unsqueeze(0).repeat(num_envs, 1))  # [num_envs, 3]
+        self.fr_wheel_rel_pos = (torch.tensor([0.6, -0.6, 0.0], device=self.device, dtype=gs.tc_float)
+                                 .unsqueeze(0).repeat(num_envs, 1))
+        self.rl_wheel_rel_pos = (torch.tensor([-0.6, 0.6, 0.0], device=self.device, dtype=gs.tc_float)
+                                 .unsqueeze(0).repeat(num_envs, 1))
+        self.rr_wheel_rel_pos = (torch.tensor([-0.6, -0.6, 0.0], device=self.device, dtype=gs.tc_float)
+                                 .unsqueeze(0).repeat(num_envs, 1))
+        self.wheel_pos = torch.zeros((num_envs, 4, 3), device=self.device, dtype=gs.tc_float)
 
         # prepare reward functions and multiply reward scales by dt
         self.reward_functions, self.episode_sums = dict(), dict()
@@ -196,12 +215,16 @@ class GemEnv:
 
     def _resample_base(self, envs_idx):
         num = len(envs_idx)
-        base_pos = gs_rand_float(
-            self.env_cfg["base_x_range"][0], self.env_cfg["base_x_range"][1], (num, 2), self.device
-        ) * gs_rand_sign((num, 2), self.device)
-        self.base_pos[envs_idx] = torch.cat([base_pos, torch.zeros((num, 1), device=self.device)], dim=1)
+        base_dist = gs_rand_float(self.env_cfg["base_dist_range"][0], self.env_cfg["base_dist_range"][1],
+                                  (num, 1), self.device)
+        base_dir = gs_rand_float(self.env_cfg["base_dir_range"][0], self.env_cfg["base_dir_range"][1],
+                                 (num, 1), self.device)
+        base_x = - base_dist * torch.cos(base_dir)
+        base_y = base_dist * torch.sin(base_dir)
+        self.base_pos[envs_idx] = torch.cat([base_x, base_y, torch.zeros((num, 1), device=self.device)], dim=1)
 
-        base_yaw = gs_rand_float(-math.pi, math.pi, (num, 1), self.device)
+        base_yaw = gs_rand_float(self.env_cfg["base_yaw_range"][0], self.env_cfg["base_yaw_range"][1],
+                                 (num, 1), self.device)
         self.base_quat[envs_idx] = xyz_to_quat(
             torch.cat([
                 torch.zeros((num, 2), device=self.device),
@@ -215,20 +238,20 @@ class GemEnv:
 
     def _resample_obstacles(self, envs_idx):
         num = len(envs_idx)
-        obstacle_left_x = gs_rand_float(
+        self.obstacle_left_x = gs_rand_float(
             self.env_cfg["obstacle_x_range"][0], self.env_cfg["obstacle_x_range"][1],
             (num, 1), self.device
         ) * gs_rand_sign((num, 1), self.device)
-        obstacle_left_y = gs_rand_float(
+        self.obstacle_left_y = gs_rand_float(
             self.env_cfg["obstacle_y_range"][0], self.env_cfg["obstacle_y_range"][1],
             (num, 1), self.device
         )
         self.obstacle_left.set_pos(
-            torch.cat([obstacle_left_x, obstacle_left_y, self.zeros + 0.75], dim=1),
+            torch.cat([self.obstacle_left_x, self.obstacle_left_y, self.zeros + 0.75], dim=1),
             envs_idx=envs_idx)
 
-        obstacle_right_x = - obstacle_left_x
-        obstacle_right_y = - obstacle_left_y
+        obstacle_right_x = - self.obstacle_left_x
+        obstacle_right_y = - self.obstacle_left_y
         self.obstacle_right.set_pos(
             torch.cat([obstacle_right_x, obstacle_right_y, self.zeros + 0.75], dim=1),
             envs_idx=envs_idx)
@@ -299,6 +322,8 @@ class GemEnv:
                 torch.norm(self.base_lin_vel, dim=1).unsqueeze(1) * self.obs_scales["lin_vel"],  # 1
                 self.base_ang_vel[:, 2].unsqueeze(1) * self.obs_scales["ang_vel"],  # 1
                 torch.norm(self.base_euler[:, :2], dim=1).unsqueeze(1) * self.obs_scales["base_euler"],  # 1
+                self.obstacle_left_x / 6,  # 1
+                self.obstacle_left_y / 4,  # 1
             ],
             dim=-1,
         )
@@ -358,30 +383,19 @@ class GemEnv:
 
     # ------------ reward functions----------------
     def _reward_dist(self):
-        return torch.log(torch.norm(self.rel_pos_world, dim=1) / 3 + 1.0)
+        self.wheel_pos[:, 0] = transform_by_quat(self.fl_wheel_rel_pos, self.base_quat) + self.base_pos
+        self.wheel_pos[:, 1] = transform_by_quat(self.fr_wheel_rel_pos, self.base_quat) + self.base_pos
+        self.wheel_pos[:, 2] = transform_by_quat(self.rl_wheel_rel_pos, self.base_quat) + self.base_pos
+        self.wheel_pos[:, 3] = transform_by_quat(self.rr_wheel_rel_pos, self.base_quat) + self.base_pos
 
-    def _reward_perp_dist(self):
-        return torch.log(self.rel_pos_for_target[:, 1] ** 2 + 1.0)
-
-    def _reward_alignment(self):
-        close_enough = ((torch.abs(self.rel_pos_for_target[:, 0]) < self.env_cfg["at_target_threshold_x"] * 5.)
-                        & (torch.abs(self.rel_pos_for_target[:, 1]) < self.env_cfg["at_target_threshold_y"] * 5.))
-        return (self.rel_yaw_cos_square - 0.5) * close_enough
+        dist = torch.norm(self.wheel_pos - self.vertices, dim=2)  # [num_envs, 4]
+        return torch.sum(dist, dim=1)
 
     def _reward_success(self):
         pos_success = ((torch.abs(self.rel_pos_for_target[:, 0]) < self.env_cfg["at_target_threshold_x"])
                        & (torch.abs(self.rel_pos_for_target[:, 1]) < self.env_cfg["at_target_threshold_y"]))
         orient_success = self.rel_yaw_cos_square > 0.8
         return (pos_success & orient_success).float()
-
-    def _reward_at_target(self):
-        return ((torch.abs(self.rel_pos_for_target[:, 0]) < self.env_cfg["at_target_threshold_x"])
-                & (torch.abs(self.rel_pos_for_target[:, 1]) < self.env_cfg["at_target_threshold_y"]))
-
-    def _reward_vel_at_target(self):
-        close_to_target = ((torch.abs(self.rel_pos_for_target[:, 0]) < self.env_cfg["at_target_threshold_x"] * 3.)
-                           & (torch.abs(self.rel_pos_for_target[:, 1]) < self.env_cfg["at_target_threshold_y"] * 3.))
-        return close_to_target * torch.norm(self.base_lin_vel, dim=1)
 
     def _reward_smoothness(self):
         return torch.norm(self.actions - self.last_actions, dim=1)

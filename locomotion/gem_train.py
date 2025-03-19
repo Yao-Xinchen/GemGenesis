@@ -63,8 +63,9 @@ def get_cfgs():
         "termination_if_pitch_greater_than": .8,
         "termination_if_x_greater_than": 100.0,
         "termination_if_y_greater_than": 100.0,
-        "base_x_range": [8.0, 25.0],
-        "base_y_range": [8.0, 25.0],
+        "base_dist_range": [6.0, 15.0],
+        "base_dir_range": [-0.78, 0.78],
+        "base_yaw_range": [-0.78, 0.78],
         "obstacle_x_range": [0.0, 4.0],
         "obstacle_y_range": [2.5, 2.8],
         "episode_length_s": 30.0,
@@ -79,7 +80,7 @@ def get_cfgs():
         "max_visualize_FPS": 60,
     }
     obs_cfg = {
-        "num_obs": 8,
+        "num_obs": 10,
         "obs_scales": {
             "rel_pos_long": 25,
             "rel_pos_short": 5,
@@ -91,16 +92,12 @@ def get_cfgs():
     }
     reward_cfg = {
         "reward_scales": {
-            "dist": -1.0,
-            "perp_dist": -.5,
-            "alignment": 10.0,
-            "success": 100.0,
-            "at_target": 10.0,
-            "vel_at_target": -2.0,
+            "dist": -.05,
             "smoothness": -0.1,
             "stillness": -2.0,
             "incline": -80.0,
             "collision": -0.01,
+            "success": 10.0,
         },
     }
     action_cfg = {
