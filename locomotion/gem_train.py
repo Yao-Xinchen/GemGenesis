@@ -67,7 +67,7 @@ def get_cfgs():
         "base_init_pos": [0.0, 0.0, 0.0],
         "base_init_quat": [1.0, 0.0, 0.0, 0.0],
         "episode_length_s": 10.0,
-        "at_target_threshold": 0.3,
+        "at_target_threshold": 0.6,
         "resampling_time_s": 10.0,
         "simulate_action_latency": True,
         "clip_actions": 1.0,
@@ -87,13 +87,14 @@ def get_cfgs():
     }
     reward_cfg = {
         "reward_scales": {
-            "dist_reduction": 10.0,
-            "perpendicular_dist": -0.01,
-            "misalignment": -5.0,
+            "dist_reduction": 50.0,
+            "perpendicular_dist": -0.1,
+            "alignment": 5.0,
             "success": 1000.0,
+            "at_target": 10.0,
             "vel_at_target": -2.0,
-            "smoothness": -0.01,
-            "stillness": -0.5,
+            "smoothness": -0.1,
+            "stillness": -2.0,
         },
     }
     command_cfg = {

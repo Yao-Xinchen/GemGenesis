@@ -306,18 +306,21 @@ class GemEnv:
 
     def _reward_perpendicular_dist(self):
         target_unit_vec = torch.stack([torch.cos(self.commands[:, 2]), torch.sin(self.commands[:, 2])], dim=1)
-        dist = torch.abs(self.rel_pos[:, 1] * target_unit_vec[:, 0] - self.rel_pos[:, 0] * target_unit_vec[:, 1])
-        return dist
+        dist = self.rel_pos[:, 1] * target_unit_vec[:, 0] - self.rel_pos[:, 0] * target_unit_vec[:, 1]
+        return dist ** 2
 
-    def _reward_misalignment(self):
+    def _reward_alignment(self):
         close_enough = torch.norm(self.rel_pos, dim=1) < self.env_cfg["at_target_threshold"] * 10
-        sin_rel = torch.sin(self.rel_yaw)
-        return sin_rel ** 2 * close_enough
+        cos_rel = torch.cos(self.rel_yaw)
+        return cos_rel ** 2 * close_enough
 
     def _reward_success(self):
         pos_success = torch.norm(self.rel_pos, dim=1) < self.env_cfg["at_target_threshold"]
         orient_success = torch.abs(self.rel_yaw) < 0.15
         return (pos_success & orient_success).float()
+
+    def _reward_at_target(self):
+        return torch.norm(self.rel_pos, dim=1) < self.env_cfg["at_target_threshold"]
 
     def _reward_vel_at_target(self):
         close_to_target = torch.norm(self.rel_pos, dim=1) < self.env_cfg["at_target_threshold"]
@@ -327,4 +330,4 @@ class GemEnv:
         return torch.norm(self.actions - self.last_actions, dim=1)
 
     def _reward_stillness(self):
-        return (torch.norm(self.base_lin_vel, dim=1) + 0.5) ** -2
+        return (torch.norm(self.base_lin_vel, dim=1) + 1.5) ** -2
