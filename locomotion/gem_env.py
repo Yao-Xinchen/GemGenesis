@@ -391,3 +391,14 @@ class GemEnv:
 
     def _reward_incline(self):
         return torch.norm(self.base_euler[:, :2], dim=1)
+
+    def _reward_collision(self):
+        force_left = torch.sum(torch.norm(
+            self.obstacle_left.get_links_net_contact_force()  # [num_envs, num_links=1, 3]
+            , dim=2
+        ), dim=1)
+        force_right = torch.sum(torch.norm(
+            self.obstacle_right.get_links_net_contact_force()  # [num_envs, num_links=1, 3]
+            , dim=2
+        ), dim=1)
+        return force_left + force_right

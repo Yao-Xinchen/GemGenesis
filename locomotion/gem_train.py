@@ -100,6 +100,7 @@ def get_cfgs():
             "smoothness": -0.1,
             "stillness": -2.0,
             "incline": -80.0,
+            "collision": -0.01,
         },
     }
     action_cfg = {
