@@ -28,8 +28,8 @@ def get_train_cfg(exp_name, max_iterations):
         "init_member_classes": {},
         "policy": {
             "activation": "tanh",
-            "actor_hidden_dims": [128, 128],
-            "critic_hidden_dims": [128, 128],
+            "actor_hidden_dims": [256, 256, 256],
+            "critic_hidden_dims": [256, 256, 256],
             "init_noise_std": 1.0,
         },
         "runner": {
@@ -94,9 +94,9 @@ def get_cfgs():
             "alignment": 5.0,
             "success": 500.0,
             "at_target": 10.0,
-            "vel_at_target": -1.0,
+            "vel_at_target": -5.0,
             "smoothness": -0.1,
-            "stillness": -5.0,
+            "stillness": -2.0,
             "incline": -40.0,
             "crash": -100.0,
         },

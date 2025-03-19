@@ -12,7 +12,7 @@ import genesis as gs
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-e", "--exp_name", type=str, default="gem")
-    parser.add_argument("--ckpt", type=int, default=300)
+    parser.add_argument("--ckpt", type=int, default=650)
     parser.add_argument("--record", action="store_true", default=False)
     args = parser.parse_args()
 
@@ -29,6 +29,8 @@ def main():
     env_cfg["visualize_camera"] = args.record
     # set the max FPS for visualization
     env_cfg["max_visualize_FPS"] = 60
+    # set the episode length to 10 seconds
+    env_cfg["episode_length_s"] = 10.0
 
     env = GemEnv(
         num_envs=1,
