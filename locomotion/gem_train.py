@@ -59,8 +59,8 @@ def get_cfgs():
     env_cfg = {
         "num_actions": 2,
         # termination
-        "termination_if_roll_greater_than": .8,  # rad
-        "termination_if_pitch_greater_than": .8,
+        "termination_if_roll_greater_than": 1.,  # rad
+        "termination_if_pitch_greater_than": 1.,
         "termination_if_x_greater_than": 100.0,
         "termination_if_y_greater_than": 100.0,
         # base pose
@@ -97,7 +97,7 @@ def get_cfgs():
             "vel_at_target": -5.0,
             "smoothness": -0.1,
             "stillness": -2.0,
-            "incline": -40.0,
+            "incline": -80.0,
             "crash": -100.0,
         },
     }

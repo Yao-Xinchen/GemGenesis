@@ -320,7 +320,7 @@ class GemEnv:
     def _reward_heading_target(self):
         far_enough = torch.norm(self.rel_pos, dim=1) > self.env_cfg["at_target_threshold"] * 10
         target_dir = torch.atan2(self.rel_pos[:, 1], self.rel_pos[:, 0])
-        return torch.cos(target_dir - self.base_euler[:, 2]) ** 3 * far_enough
+        return torch.cos(target_dir - self.base_euler[:, 2]) ** 2 * far_enough
 
     def _reward_alignment(self):
         close_enough = torch.norm(self.rel_pos, dim=1) < self.env_cfg["at_target_threshold"] * 10
