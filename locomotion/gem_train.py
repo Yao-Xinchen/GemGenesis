@@ -59,8 +59,8 @@ def get_cfgs():
     env_cfg = {
         "num_actions": 4,
         # termination
-        "termination_if_roll_greater_than": .1,  # rad
-        "termination_if_pitch_greater_than": .1,
+        "termination_if_roll_greater_than": .3,  # rad
+        "termination_if_pitch_greater_than": .3,
         "termination_if_x_greater_than": 100.0,
         "termination_if_y_greater_than": 100.0,
         # base pose
@@ -86,13 +86,14 @@ def get_cfgs():
         },
     }
     reward_cfg = {
-        "yaw_lambda": -10.0,
         "reward_scales": {
-            "target": 50.0,
-            "smooth": -1e-4,
-            # "yaw": 0.01,
-            "crash": -10.0,
-            "still": -0.1,
+            "dist_reduction": 10.0,
+            "perpendicular_dist": -0.01,
+            "misalignment": -5.0,
+            "success": 1000.0,
+            "vel_at_target": -2.0,
+            "smoothness": -0.01,
+            "stillness": -0.5,
         },
     }
     command_cfg = {

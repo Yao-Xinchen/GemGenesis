@@ -202,9 +202,9 @@ class GemEnv:
         self.base_lin_vel[:] = transform_by_quat(self.gem.get_vel(), inv_base_quat)
         self.base_ang_vel[:] = transform_by_quat(self.gem.get_ang(), inv_base_quat)
 
-        # resample targets
-        envs_idx = self._at_target()
-        self._resample_commands(envs_idx)
+        # # resample targets
+        # envs_idx = self._at_target()
+        # self._resample_commands(envs_idx)
 
         self.crash_condition = (
                 (torch.abs(self.base_euler[:, 1]) > self.env_cfg["termination_if_pitch_greater_than"])
@@ -297,25 +297,34 @@ class GemEnv:
         return self.obs_buf, None
 
     # ------------ reward functions----------------
-    def _reward_target(self):
-        target_rew = torch.sum(torch.square(self.last_rel_pos), dim=1) - torch.sum(torch.square(self.rel_pos), dim=1)
-        return target_rew
+    def _reward_dist_reduction(self):
+        dist_decrease = torch.norm(self.last_rel_pos, dim=1) - torch.norm(self.rel_pos, dim=1)
+        return dist_decrease
 
-    def _reward_smooth(self):
-        smooth_rew = torch.sum(torch.square(self.actions - self.last_actions), dim=1)
-        return smooth_rew
+    def _reward_dist(self):
+        return torch.norm(self.rel_pos, dim=1)
 
-    def _reward_yaw(self):
-        yaw_rew = torch.exp(self.reward_cfg["yaw_lambda"] * torch.abs(self.rel_yaw))
-        return yaw_rew
+    def _reward_perpendicular_dist(self):
+        target_unit_vec = torch.stack([torch.cos(self.commands[:, 2]), torch.sin(self.commands[:, 2])], dim=1)
+        dist = torch.abs(self.rel_pos[:, 1] * target_unit_vec[:, 0] - self.rel_pos[:, 0] * target_unit_vec[:, 1])
+        return dist
 
-    def _reward_crash(self):
-        crash_rew = -self.crash_condition.float()
-        return crash_rew
+    def _reward_misalignment(self):
+        close_enough = torch.norm(self.rel_pos, dim=1) < self.env_cfg["at_target_threshold"] * 10
+        sin_rel = torch.sin(self.rel_yaw)
+        return sin_rel ** 2 * close_enough
 
-    def _reward_still(self):
-        # penalize for not moving
-        still_rew = (torch.norm(self.base_lin_vel, dim=1) + 0.5) ** -2
-        return still_rew
+    def _reward_success(self):
+        pos_success = torch.norm(self.rel_pos, dim=1) < self.env_cfg["at_target_threshold"]
+        orient_success = torch.abs(self.rel_yaw) < 0.15
+        return (pos_success & orient_success).float()
 
-    # TODO
+    def _reward_vel_at_target(self):
+        close_to_target = torch.norm(self.rel_pos, dim=1) < self.env_cfg["at_target_threshold"]
+        return close_to_target * torch.norm(self.base_lin_vel, dim=1)
+
+    def _reward_smoothness(self):
+        return torch.norm(self.actions - self.last_actions, dim=1)
+
+    def _reward_stillness(self):
+        return (torch.norm(self.base_lin_vel, dim=1) + 0.5) ** -2
