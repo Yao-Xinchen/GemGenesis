@@ -128,7 +128,7 @@ def main():
     gs.init(logging_level="error")
 
     log_dir = f"logs/{args.exp_name}"
-    env_cfg, obs_cfg, reward_cfg, command_cfg, action_cfg = get_cfgs()
+    env_cfg, obs_cfg, reward_cfg, action_cfg = get_cfgs()
 
     # visualize the target
     env_cfg["visualize_target"] = True
@@ -143,7 +143,6 @@ def main():
         env_cfg=env_cfg,
         obs_cfg=obs_cfg,
         reward_cfg=reward_cfg,
-        command_cfg=command_cfg,
         action_cfg=action_cfg,
         show_viewer=True,
     )

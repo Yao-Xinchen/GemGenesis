@@ -63,9 +63,10 @@ def get_cfgs():
         "termination_if_pitch_greater_than": .8,
         "termination_if_x_greater_than": 100.0,
         "termination_if_y_greater_than": 100.0,
-        # base pose
-        "base_init_pos": [0.0, 0.0, 0.0],
-        "base_init_quat": [1.0, 0.0, 0.0, 0.0],
+        "base_x_range": [8.0, 25.0],
+        "base_y_range": [8.0, 25.0],
+        "obstacle_x_range": [0.0, 4.0],
+        "obstacle_y_range": [2.5, 2.8],
         "episode_length_s": 30.0,
         "at_target_threshold_x": 1.5,  # space length 5.5m, car length 2m, so <=(5.5-2)/2=1.75
         "at_target_threshold_y": 0.6,  # space width 2.7m, car width 1.5m, so <=(2.7-1.5)/2=0.6
@@ -78,20 +79,21 @@ def get_cfgs():
         "max_visualize_FPS": 60,
     }
     obs_cfg = {
-        "num_obs": 7,
+        "num_obs": 8,
         "obs_scales": {
             "rel_pos_long": 25,
             "rel_pos_short": 5,
             "lin_vel": 0.15,
             "ang_vel": 1.2,
             "rel_yaw_cos_square": 1.0,
+            "base_euler": 1.0,
         },
     }
     reward_cfg = {
         "reward_scales": {
             "dist": -1.0,
             "perp_dist": -.5,
-            "alignment": 5.0,
+            "alignment": 10.0,
             "success": 100.0,
             "at_target": 10.0,
             "vel_at_target": -2.0,
@@ -100,11 +102,6 @@ def get_cfgs():
             "incline": -80.0,
             "crash": -100.0,
         },
-    }
-    command_cfg = {
-        "num_commands": 3,
-        "pos_x_range": [-20.0, 20.0],
-        "pos_y_range": [-20.0, 20.0],
     }
     action_cfg = {
         "action_scales": {
@@ -117,7 +114,7 @@ def get_cfgs():
         },
     }
 
-    return env_cfg, obs_cfg, reward_cfg, command_cfg, action_cfg
+    return env_cfg, obs_cfg, reward_cfg, action_cfg
 
 
 def main():
@@ -130,7 +127,7 @@ def main():
     gs.init(logging_level="error")
 
     log_dir = f"logs/{args.exp_name}"
-    env_cfg, obs_cfg, reward_cfg, command_cfg, action_cfg = get_cfgs()
+    env_cfg, obs_cfg, reward_cfg, action_cfg = get_cfgs()
     train_cfg = get_train_cfg(args.exp_name, args.max_iterations)
 
     if os.path.exists(log_dir):
@@ -142,7 +139,6 @@ def main():
         env_cfg=env_cfg,
         obs_cfg=obs_cfg,
         reward_cfg=reward_cfg,
-        command_cfg=command_cfg,
         action_cfg=action_cfg,
         show_viewer=False,
     )
@@ -150,7 +146,7 @@ def main():
     runner = OnPolicyRunner(env, train_cfg, log_dir, device="cuda:0")
 
     pickle.dump(
-        [env_cfg, obs_cfg, reward_cfg, command_cfg, train_cfg, action_cfg],
+        [env_cfg, obs_cfg, reward_cfg, train_cfg, action_cfg],
         open(f"{log_dir}/cfgs.pkl", "wb"),
     )
 
