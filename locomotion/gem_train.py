@@ -88,13 +88,15 @@ def get_cfgs():
     reward_cfg = {
         "reward_scales": {
             "dist_reduction": 50.0,
-            "perpendicular_dist": -0.1,
+            "perp_dist_reduction": 1.0,
+            "heading_target": 3.0,
             "alignment": 5.0,
-            "success": 1000.0,
+            "success": 100.0,
             "at_target": 10.0,
             "vel_at_target": -1.0,
             "smoothness": -0.1,
             "stillness": -2.0,
+            "incline": -15.0,
         },
     }
     command_cfg = {
@@ -104,8 +106,12 @@ def get_cfgs():
     }
     action_cfg = {
         "action_scales": {
-            "steering": 0.2,
+            "steering": 0.15,
             "velocity": 5.0,
+        },
+        "action_limits": {
+            "steering_max": 0.3,
+            "velocity_max": 10.0,
         },
     }
 

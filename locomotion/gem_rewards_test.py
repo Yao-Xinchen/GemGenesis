@@ -71,7 +71,7 @@ class RewardBarVisualizer:
         # Update labels
         for label, value, bar in zip(self.labels, values, self.bars):
             label.set_position((min(value, 0.01) if value < 0 else 0.01, bar.get_y() + bar.get_height() / 2))
-            label.set_text(f"{value:.2f}")
+            label.set_text(f"{value:.4f}")
 
         # Update the figure
         self.fig.canvas.draw_idle()

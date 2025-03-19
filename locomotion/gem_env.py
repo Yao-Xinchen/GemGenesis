@@ -137,6 +137,8 @@ class GemEnv:
         self.last_rel_pos = torch.zeros_like(self.rel_pos)
         self.base_euler = torch.zeros((self.num_envs, 3), device=self.device, dtype=gs.tc_float)
         self.rel_yaw = torch.zeros((self.num_envs,), device=self.device, dtype=gs.tc_float)
+        self.perp_dist = torch.zeros((self.num_envs,), device=self.device, dtype=gs.tc_float)
+        self.last_perp_dist = torch.zeros_like(self.perp_dist)
 
         self.actions = torch.zeros((self.num_envs, self.num_actions), device=self.device, dtype=gs.tc_float)
         self.last_actions = torch.zeros_like(self.actions)
@@ -179,9 +181,13 @@ class GemEnv:
 
         # control the gem
         self.steering = actions[:, 0] * self.action_cfg["action_scales"]["steering"]
+        max_steering = self.action_cfg["action_limits"]["steering_max"]
+        self.steering = torch.clip(self.steering, -max_steering, max_steering)
         self.speed = actions[:, 1] * self.action_cfg["action_scales"]["velocity"]
+        max_speed = self.action_cfg["action_limits"]["velocity_max"]
+        self.speed = torch.clip(self.speed, -max_speed, max_speed)
         self.outputs = self.locomotion.control(steering=self.steering, velocity=self.speed)
-        self.gem.control_dofs_position(self.outputs[:, :2], self.pos_idx)
+        self.gem.control_dofs_position(self.outputs[:, :2],self.pos_idx)
         self.gem.control_dofs_velocity(self.outputs[:, 2:], self.vel_idx)
 
         # step the scene
@@ -201,6 +207,9 @@ class GemEnv:
         inv_base_quat = inv_quat(self.base_quat)
         self.base_lin_vel[:] = transform_by_quat(self.gem.get_vel(), inv_base_quat)
         self.base_ang_vel[:] = transform_by_quat(self.gem.get_ang(), inv_base_quat)
+        self.last_perp_dist = self.perp_dist
+        target_unit_vec = torch.stack([torch.cos(self.commands[:, 2]), torch.sin(self.commands[:, 2])], dim=1)
+        self.perp_dist = (self.rel_pos[:, 1] * target_unit_vec[:, 0] - self.rel_pos[:, 0] * target_unit_vec[:, 1]) ** 2
 
         # # resample targets
         # envs_idx = self._at_target()
@@ -304,13 +313,13 @@ class GemEnv:
     def _reward_dist(self):
         return torch.norm(self.rel_pos, dim=1)
 
-    def _reward_perpendicular_dist(self):
-        target_unit_vec = torch.stack([torch.cos(self.commands[:, 2]), torch.sin(self.commands[:, 2])], dim=1)
-        dist = self.rel_pos[:, 1] * target_unit_vec[:, 0] - self.rel_pos[:, 0] * target_unit_vec[:, 1]
-        return dist ** 2
+    def _reward_perp_dist_reduction(self):
+        return self.last_perp_dist - self.perp_dist
 
-    # def _reward_head_to_target(self):
-    #     return 0 # TODO
+    def _reward_heading_target(self):
+        far_enough = torch.norm(self.rel_pos, dim=1) > self.env_cfg["at_target_threshold"] * 10
+        target_dir = torch.atan2(self.rel_pos[:, 1], self.rel_pos[:, 0])
+        return torch.cos(target_dir - self.base_euler[:, 2]) ** 3 * far_enough
 
     def _reward_alignment(self):
         close_enough = torch.norm(self.rel_pos, dim=1) < self.env_cfg["at_target_threshold"] * 10
@@ -334,3 +343,6 @@ class GemEnv:
 
     def _reward_stillness(self):
         return (torch.norm(self.base_lin_vel, dim=1) + 1.5) ** -2
+
+    def _reward_incline(self):
+        return torch.norm(self.base_euler[:, :2], dim=1)
