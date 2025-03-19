@@ -28,8 +28,8 @@ def get_train_cfg(exp_name, max_iterations):
         "init_member_classes": {},
         "policy": {
             "activation": "tanh",
-            "actor_hidden_dims": [256, 256, 256],
-            "critic_hidden_dims": [256, 256, 256],
+            "actor_hidden_dims": [128, 128, 128],
+            "critic_hidden_dims": [128, 128, 128],
             "init_noise_std": 1.0,
         },
         "runner": {
@@ -40,7 +40,7 @@ def get_train_cfg(exp_name, max_iterations):
             "log_interval": 1,
             "max_iterations": max_iterations,
             "num_steps_per_env": 100,
-            "policy_class_name": "ActorCritic",
+            "policy_class_name": "ActorCriticRecurrent",
             "record_interval": -1,
             "resume": False,
             "resume_path": None,
@@ -59,15 +59,16 @@ def get_cfgs():
     env_cfg = {
         "num_actions": 2,
         # termination
-        "termination_if_roll_greater_than": 1.,  # rad
-        "termination_if_pitch_greater_than": 1.,
+        "termination_if_roll_greater_than": .8,  # rad
+        "termination_if_pitch_greater_than": .8,
         "termination_if_x_greater_than": 100.0,
         "termination_if_y_greater_than": 100.0,
         # base pose
         "base_init_pos": [0.0, 0.0, 0.0],
         "base_init_quat": [1.0, 0.0, 0.0, 0.0],
         "episode_length_s": 30.0,
-        "at_target_threshold": 0.6,
+        "at_target_threshold_x": 1.5,  # space length 5.5m, car length 2m, so <=(5.5-2)/2=1.75
+        "at_target_threshold_y": 0.6,  # space width 2.7m, car width 1.5m, so <=(2.7-1.5)/2=0.6
         # "resampling_time_s": 30.0,
         "simulate_action_latency": True,
         "clip_actions": 1.0,
@@ -88,13 +89,12 @@ def get_cfgs():
     }
     reward_cfg = {
         "reward_scales": {
-            "dist_reduction": 50.0,
-            "perp_dist_reduction": 1.0,
-            "heading_target": 3.0,
+            "dist": -1.0,
+            "perp_dist": -.5,
             "alignment": 5.0,
-            "success": 500.0,
+            "success": 100.0,
             "at_target": 10.0,
-            "vel_at_target": -5.0,
+            "vel_at_target": -2.0,
             "smoothness": -0.1,
             "stillness": -2.0,
             "incline": -80.0,

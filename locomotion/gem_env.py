@@ -69,7 +69,7 @@ class GemEnv:
             self.target = self.scene.add_entity(
                 morph=gs.morphs.Box(
                     pos=(1.0, 0.0, 0.0),
-                    size=(4.0, 2.5, 0.01),
+                    size=(5.5, 2.7, 0.01),
                     fixed=True,
                     visualization=True,
                     collision=False,
@@ -133,12 +133,14 @@ class GemEnv:
         self.episode_length_buf = torch.zeros((self.num_envs,), device=self.device, dtype=gs.tc_int)
         self.commands = torch.zeros((self.num_envs, self.num_commands), device=self.device, dtype=gs.tc_float)
         self.crash_condition = torch.zeros((self.num_envs,), device=self.device, dtype=gs.tc_int)
-        self.rel_pos = torch.zeros((self.num_envs, 3), device=self.device, dtype=gs.tc_float)
-        self.last_rel_pos = torch.zeros_like(self.rel_pos)
+        self.rel_pos_world = torch.zeros((self.num_envs, 3), device=self.device, dtype=gs.tc_float)
+        self.last_rel_pos_world = torch.zeros_like(self.rel_pos_world)
+        self.rel_pos_for_gem = torch.zeros_like(self.rel_pos_world)
+        self.rel_pos_for_target = torch.zeros_like(self.rel_pos_world)
         self.base_euler = torch.zeros((self.num_envs, 3), device=self.device, dtype=gs.tc_float)
         self.rel_yaw_cos_square = torch.zeros((self.num_envs,), device=self.device, dtype=gs.tc_float)
-        self.perp_dist = torch.zeros((self.num_envs,), device=self.device, dtype=gs.tc_float)
-        self.last_perp_dist = torch.zeros_like(self.perp_dist)
+        self.target_pos = torch.zeros((self.num_envs, 3), device=self.device, dtype=gs.tc_float)
+        self.target_quat = torch.zeros((self.num_envs, 4), device=self.device, dtype=gs.tc_float)
 
         self.actions = torch.zeros((self.num_envs, self.num_actions), device=self.device, dtype=gs.tc_float)
         self.last_actions = torch.zeros_like(self.actions)
@@ -160,15 +162,16 @@ class GemEnv:
         self.commands[envs_idx, 0] = gs_rand_float(*self.command_cfg["pos_x_range"], (len(envs_idx),), self.device)
         self.commands[envs_idx, 1] = gs_rand_float(*self.command_cfg["pos_y_range"], (len(envs_idx),), self.device)
         self.commands[envs_idx, 2] = gs_rand_float(-torch.pi, torch.pi, (len(envs_idx),), self.device)
+        zeros = torch.zeros_like(self.commands[envs_idx, 0])
+        # position
+        self.target_pos[envs_idx] = torch.stack([self.commands[envs_idx, 0], self.commands[envs_idx, 1], zeros], dim=1)
+        # orientation
+        euler = torch.stack([zeros, zeros, self.commands[envs_idx, 2]], dim=1)
+        self.target_quat[envs_idx] = xyz_to_quat(euler * r2d)
 
         if self.target is not None:
-            zeros = torch.zeros_like(self.commands[envs_idx, 0])
-            # position
-            pos = torch.stack([self.commands[envs_idx, 0], self.commands[envs_idx, 1], zeros], dim=1)
-            self.target.set_pos(pos, zero_velocity=True, envs_idx=envs_idx)
-            # orientation
-            euler = torch.stack([zeros, zeros, self.commands[envs_idx, 2]], dim=1)
-            self.target.set_quat(xyz_to_quat(euler * r2d), zero_velocity=True, envs_idx=envs_idx)
+            self.target.set_pos(self.target_pos[envs_idx], zero_velocity=True, envs_idx=envs_idx)
+            self.target.set_quat(self.target_quat[envs_idx], zero_velocity=True, envs_idx=envs_idx)
 
     def step(self, actions):
         self.actions = torch.clip(actions, -self.env_cfg["clip_actions"], self.env_cfg["clip_actions"])
@@ -191,8 +194,11 @@ class GemEnv:
         self.episode_length_buf += 1
         self.last_base_pos[:] = self.base_pos[:]
         self.base_pos[:] = self.gem.get_pos()
-        self.rel_pos = self.commands - self.base_pos
-        self.last_rel_pos = self.commands - self.last_base_pos
+        self.rel_pos_world = self.commands - self.base_pos
+        self.last_rel_pos_world = self.commands - self.last_base_pos
+        rel_2d = torch.cat([self.rel_pos_world[:, :2], torch.zeros((self.num_envs, 1), device=self.device)], dim=1)
+        self.rel_pos_for_gem = transform_by_quat(rel_2d, inv_quat(self.base_quat))
+        self.rel_pos_for_target = transform_by_quat(rel_2d, inv_quat(self.target_quat))
         self.base_quat[:] = self.gem.get_quat()
         self.base_euler = quat_to_xyz(
             transform_quat_by_quat(torch.ones_like(self.base_quat) * self.inv_base_init_quat, self.base_quat),
@@ -201,13 +207,6 @@ class GemEnv:
         inv_base_quat = inv_quat(self.base_quat)
         self.base_lin_vel[:] = transform_by_quat(self.gem.get_vel(), inv_base_quat)
         self.base_ang_vel[:] = transform_by_quat(self.gem.get_ang(), inv_base_quat)
-        self.last_perp_dist = self.perp_dist
-        target_unit_vec = torch.stack([torch.cos(self.commands[:, 2]), torch.sin(self.commands[:, 2])], dim=1)
-        self.perp_dist = (self.rel_pos[:, 1] * target_unit_vec[:, 0] - self.rel_pos[:, 0] * target_unit_vec[:, 1]) ** 2
-
-        # # resample targets
-        # envs_idx = self._at_target()
-        # self._resample_commands(envs_idx)
 
         self.crash_condition = (
                 (torch.abs(self.base_euler[:, 1]) > self.env_cfg["termination_if_pitch_greater_than"])
@@ -228,14 +227,10 @@ class GemEnv:
             self.rew_buf += rew
             self.episode_sums[name] += rew
 
-        rel_pos_for_gem = transform_by_quat(
-            torch.cat([self.rel_pos[:, :2], torch.zeros((self.num_envs, 1), device=self.device)], dim=1),
-            inv_quat(self.base_quat),
-        )
         norm_long = self.obs_cfg["obs_scales"]["rel_pos_long"]
         norm_short = self.obs_cfg["obs_scales"]["rel_pos_short"]
-        long_dist = torch.clip(rel_pos_for_gem[:, :2], -norm_long, norm_long) / norm_long
-        short_dist = torch.clip(rel_pos_for_gem[:, :2], -norm_short, norm_short) / norm_short
+        long_dist = torch.clip(self.rel_pos_for_gem[:, :2], -norm_long, norm_long) / norm_long
+        short_dist = torch.clip(self.rel_pos_for_gem[:, :2], -norm_short, norm_short) / norm_short
 
         self.obs_buf = torch.cat(
             [
@@ -265,8 +260,8 @@ class GemEnv:
         # reset gem
         self.base_pos[envs_idx] = self.base_init_pos
         self.last_base_pos[envs_idx] = self.base_init_pos
-        self.rel_pos = self.commands - self.base_pos
-        self.last_rel_pos = self.commands - self.last_base_pos
+        self.rel_pos_world = self.commands - self.base_pos
+        self.last_rel_pos_world = self.commands - self.last_base_pos
         self.base_quat[envs_idx] = self.base_init_quat.reshape(1, -1)
         self.gem.set_pos(self.base_pos[envs_idx], zero_velocity=True, envs_idx=envs_idx)
         self.gem.set_quat(self.base_quat[envs_idx], zero_velocity=True, envs_idx=envs_idx)
@@ -307,35 +302,30 @@ class GemEnv:
         return self.obs_buf, None
 
     # ------------ reward functions----------------
-    def _reward_dist_reduction(self):
-        dist_decrease = torch.norm(self.last_rel_pos, dim=1) - torch.norm(self.rel_pos, dim=1)
-        return dist_decrease
-
     def _reward_dist(self):
-        return torch.norm(self.rel_pos, dim=1)
+        return torch.log(torch.norm(self.rel_pos_world, dim=1) / 3 + 1.0)
 
-    def _reward_perp_dist_reduction(self):
-        return self.last_perp_dist - self.perp_dist
-
-    def _reward_heading_target(self):
-        far_enough = torch.norm(self.rel_pos, dim=1) > self.env_cfg["at_target_threshold"] * 10
-        target_dir = torch.atan2(self.rel_pos[:, 1], self.rel_pos[:, 0])
-        return torch.cos(target_dir - self.base_euler[:, 2]) ** 2 * far_enough
+    def _reward_perp_dist(self):
+        return torch.log(self.rel_pos_for_target[:, 1] ** 2 + 1.0)
 
     def _reward_alignment(self):
-        close_enough = torch.norm(self.rel_pos, dim=1) < self.env_cfg["at_target_threshold"] * 10
+        close_enough = ((torch.abs(self.rel_pos_for_target[:, 0]) < self.env_cfg["at_target_threshold_x"] * 5.)
+                        & (torch.abs(self.rel_pos_for_target[:, 1]) < self.env_cfg["at_target_threshold_y"] * 5.))
         return self.rel_yaw_cos_square * close_enough
 
     def _reward_success(self):
-        pos_success = torch.norm(self.rel_pos, dim=1) < self.env_cfg["at_target_threshold"]
+        pos_success = ((torch.abs(self.rel_pos_for_target[:, 0]) < self.env_cfg["at_target_threshold_x"])
+                       & (torch.abs(self.rel_pos_for_target[:, 1]) < self.env_cfg["at_target_threshold_y"]))
         orient_success = self.rel_yaw_cos_square > 0.8
         return (pos_success & orient_success).float()
 
     def _reward_at_target(self):
-        return torch.norm(self.rel_pos, dim=1) < self.env_cfg["at_target_threshold"]
+        return ((torch.abs(self.rel_pos_for_target[:, 0]) < self.env_cfg["at_target_threshold_x"])
+                & (torch.abs(self.rel_pos_for_target[:, 1]) < self.env_cfg["at_target_threshold_y"]))
 
     def _reward_vel_at_target(self):
-        close_to_target = torch.norm(self.rel_pos, dim=1) < self.env_cfg["at_target_threshold"]
+        close_to_target = ((torch.abs(self.rel_pos_for_target[:, 0]) < self.env_cfg["at_target_threshold_x"] * 3.)
+                           & (torch.abs(self.rel_pos_for_target[:, 1]) < self.env_cfg["at_target_threshold_y"] * 3.))
         return close_to_target * torch.norm(self.base_lin_vel, dim=1)
 
     def _reward_smoothness(self):
