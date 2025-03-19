@@ -309,6 +309,9 @@ class GemEnv:
         dist = self.rel_pos[:, 1] * target_unit_vec[:, 0] - self.rel_pos[:, 0] * target_unit_vec[:, 1]
         return dist ** 2
 
+    # def _reward_head_to_target(self):
+    #     return 0 # TODO
+
     def _reward_alignment(self):
         close_enough = torch.norm(self.rel_pos, dim=1) < self.env_cfg["at_target_threshold"] * 10
         cos_rel = torch.cos(self.rel_yaw)
@@ -316,7 +319,7 @@ class GemEnv:
 
     def _reward_success(self):
         pos_success = torch.norm(self.rel_pos, dim=1) < self.env_cfg["at_target_threshold"]
-        orient_success = torch.abs(self.rel_yaw) < 0.15
+        orient_success = torch.cos(self.rel_yaw) > 0.8
         return (pos_success & orient_success).float()
 
     def _reward_at_target(self):

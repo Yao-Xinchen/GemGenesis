@@ -92,7 +92,7 @@ def get_cfgs():
             "alignment": 5.0,
             "success": 1000.0,
             "at_target": 10.0,
-            "vel_at_target": -2.0,
+            "vel_at_target": -1.0,
             "smoothness": -0.1,
             "stillness": -2.0,
         },
