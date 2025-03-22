@@ -1,10 +1,6 @@
 import argparse
-import os
-import pickle
-import time
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
 
 import torch
 from gem_env import GemEnv
@@ -12,7 +8,7 @@ from rsl_rl.runners import OnPolicyRunner
 
 import genesis as gs
 
-from gem_manual import ManualController
+from basic.gem_manual import ManualController
 from gem_train import get_cfgs
 
 

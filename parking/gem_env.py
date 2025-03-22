@@ -1,12 +1,9 @@
 import torch
 import math
 import genesis as gs
-from genesis.ext.trimesh.path.packing import visualize
-from genesis.utils.geom import xyz_to_quat, quat_to_xyz, transform_by_quat, inv_quat, transform_quat_by_quat
-from sympy.physics.units import degree
-from torch.onnx.symbolic_opset9 import unsqueeze
+from genesis.utils.geom import xyz_to_quat, quat_to_xyz, transform_by_quat, inv_quat
 
-from gem_ackermann import GemAckermann
+from basic.gem_ackermann import GemAckermann
 
 
 def gs_rand_float(lower, upper, shape, device):
