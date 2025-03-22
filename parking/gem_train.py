@@ -58,19 +58,18 @@ def get_train_cfg(exp_name, max_iterations):
 def get_cfgs():
     env_cfg = {
         "num_actions": 2,
+        # physics
+        "base_x_range": [-8.0, 8.0],
+        "base_y_range": [3.0, 4.0],
+        "base_yaw_range": [-0.25, 0.25],
+        "wall_height": 1.5,
+        "wall_thickness": 0.1,
         # termination
         "termination_if_roll_greater_than": .8,  # rad
         "termination_if_pitch_greater_than": .8,
-        "termination_if_x_greater_than": 100.0,
-        "termination_if_y_greater_than": 100.0,
-        "base_dist_range": [6.0, 15.0],
-        "base_dir_range": [-0.78, 0.78],
-        "base_yaw_range": [-0.78, 0.78],
-        "obstacle_x_range": [0.0, 4.0],
-        "obstacle_y_range": [2.5, 2.8],
         "episode_length_s": 30.0,
-        "at_target_threshold_x": 1.5,  # space length 5.5m, car length 2m, so <=(5.5-2)/2=1.75
-        "at_target_threshold_y": 0.6,  # space width 2.7m, car width 1.5m, so <=(2.7-1.5)/2=0.6
+        "at_target_threshold_x": 1.0,
+        "at_target_threshold_y": 0.4,
         # "resampling_time_s": 30.0,
         "simulate_action_latency": True,
         "clip_actions": 1.0,
@@ -82,8 +81,7 @@ def get_cfgs():
     obs_cfg = {
         "num_obs": 10,
         "obs_scales": {
-            "rel_pos_long": 25,
-            "rel_pos_short": 5,
+            "rel_dist": 0.2,
             "lin_vel": 0.15,
             "ang_vel": 1.2,
             "rel_yaw_cos_square": 1.0,
@@ -92,12 +90,12 @@ def get_cfgs():
     }
     reward_cfg = {
         "reward_scales": {
-            "dist": -.05,
+            "dist": -.5,
             "smoothness": -0.1,
-            "stillness": -2.0,
+            # "stillness": -2.0,
             "incline": -80.0,
-            "collision": -0.01,
-            "success": 10.0,
+            "collision": -0.1,
+            "success": 50.0,
         },
     }
     action_cfg = {
