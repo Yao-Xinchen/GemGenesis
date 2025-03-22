@@ -244,6 +244,7 @@ class GemEnv:
         self.base_euler = quat_to_xyz(self.base_quat) * d2r
 
     def step(self, actions):
+        self.last_actions[:] = self.actions[:]
         self.actions = torch.clip(actions, -self.env_cfg["clip_actions"], self.env_cfg["clip_actions"])
 
         # control the gem
@@ -318,8 +319,6 @@ class GemEnv:
             dim=-1,
         )
 
-        self.last_actions[:] = self.actions[:]
-
         return self.obs_buf, None, self.rew_buf, self.reset_buf, self.extras
 
     def get_observations(self):
@@ -375,6 +374,12 @@ class GemEnv:
     def _reward_dist(self):
         return torch.norm(self.rel_pos_for_gem, dim=1)
 
+    def _reward_alignment(self):
+        return self.rel_yaw_cos_square
+
+    def _reward_dist_y(self):
+        return torch.abs(self.rel_pos_for_target[:, 1])
+
     def _reward_success(self):
         pos_success = ((torch.abs(self.rel_pos_for_target[:, 0]) < self.env_cfg["at_target_threshold_x"])
                        & (torch.abs(self.rel_pos_for_target[:, 1]) < self.env_cfg["at_target_threshold_y"]))
@@ -383,9 +388,6 @@ class GemEnv:
 
     def _reward_smoothness(self):
         return torch.norm(self.actions - self.last_actions, dim=1)
-
-    def _reward_stillness(self):
-        return (torch.norm(self.base_lin_vel, dim=1) + 1.5) ** -2
 
     def _reward_incline(self):
         return torch.norm(self.base_euler[:, :2], dim=1)

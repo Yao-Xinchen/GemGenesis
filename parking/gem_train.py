@@ -90,10 +90,11 @@ def get_cfgs():
     }
     reward_cfg = {
         "reward_scales": {
-            "dist": -.5,
-            "smoothness": -0.1,
-            # "stillness": -2.0,
-            "incline": -80.0,
+            "dist": -.3,
+            "alignment": 2.0,
+            "dist_y": -.6,
+            "smoothness": -0.5,
+            "incline": -5.0,
             "collision": -0.1,
             "success": 50.0,
         },
@@ -116,7 +117,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-e", "--exp_name", type=str, default="gem")
     parser.add_argument("-B", "--num_envs", type=int, default=8192)
-    parser.add_argument("--max_iterations", type=int, default=1000)
+    parser.add_argument("--max_iterations", type=int, default=2500)
     args = parser.parse_args()
 
     gs.init(logging_level="error")
