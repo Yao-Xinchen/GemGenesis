@@ -95,8 +95,8 @@ def get_cfgs():
             "dist_y": 8.,
             "smoothness": -1.0,
             "incline": -5.0,
-            # "collision": -0.001,
-            "success": 1000.0,
+            "collision": -0.01,
+            "success": 50.0,
         },
     }
     action_cfg = {
@@ -118,6 +118,7 @@ def main():
     parser.add_argument("-e", "--exp_name", type=str, default="gem")
     parser.add_argument("-B", "--num_envs", type=int, default=8192)
     parser.add_argument("--max_iterations", type=int, default=2500)
+    parser.add_argument("-r", "--resume", type=str, default=None)
     args = parser.parse_args()
 
     gs.init(logging_level="error")
@@ -145,6 +146,13 @@ def main():
         [env_cfg, obs_cfg, reward_cfg, train_cfg, action_cfg],
         open(f"{log_dir}/cfgs.pkl", "wb"),
     )
+
+    if args.resume is not None:
+        try:
+            runner.load(f"{args.resume}")
+            print(f"Resuming training from {args.resume}")
+        except FileNotFoundError:
+            print(f"Could not find model checkpoint {args.resume}. Training from scratch.")
 
     runner.learn(num_learning_iterations=args.max_iterations, init_at_random_ep_len=True)
 
