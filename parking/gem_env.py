@@ -180,7 +180,7 @@ class GemEnv:
         self.vel_idx = [self.gem.get_joint(name).dof_idx_local for name in vel_joints]
         joint_idx = self.pos_idx + self.vel_idx
         kp_tensor = torch.tensor([35., 35., 0., 0., 0., 0.], device=device)
-        kv_tensor = torch.tensor([5., 5., 30., 30., 30., 30.], device=device)
+        kv_tensor = torch.tensor([5., 5., 60., 60., 60., 60.], device=device)
         self.gem.set_dofs_kp(kp=kp_tensor, dofs_idx_local=joint_idx)
         self.gem.set_dofs_kv(kv=kv_tensor, dofs_idx_local=joint_idx)
 
@@ -254,7 +254,6 @@ class GemEnv:
         self.speed = actions[:, 1] * self.action_cfg["action_scales"]["velocity"]
         max_speed = self.action_cfg["action_limits"]["velocity_max"]
         self.speed = torch.clip(self.speed, -max_speed, max_speed)
-        self.speed = torch.round(self.speed)
 
         self.outputs = self.locomotion.control(steering=self.steering, velocity=self.speed)
         self.gem.control_dofs_position(self.outputs[:, :2], self.pos_idx)
@@ -390,9 +389,6 @@ class GemEnv:
 
     def _reward_smoothness(self):
         return torch.norm(self.actions - self.last_actions, dim=1)
-
-    def _reward_incline(self):
-        return torch.norm(self.base_euler[:, :2], dim=1)
 
     def _reward_collision(self):
         force = torch.sum(torch.norm(

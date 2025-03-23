@@ -67,7 +67,7 @@ def get_cfgs():
         # termination
         "termination_if_roll_greater_than": .8,  # rad
         "termination_if_pitch_greater_than": .8,
-        "episode_length_s": 30.0,
+        "episode_length_s": 15.0,
         "at_target_threshold_x": 1.0,
         "at_target_threshold_y": 0.4,
         # "resampling_time_s": 30.0,
@@ -94,7 +94,6 @@ def get_cfgs():
             "alignment": 2.0,
             "dist_y": 8.,
             "smoothness": -1.0,
-            "incline": -5.0,
             "collision": -0.01,
             "success": 50.0,
         },

@@ -35,7 +35,7 @@ def main():
     # set the max FPS for visualization
     env_cfg["max_visualize_FPS"] = 60
     # set the episode length to 10 seconds
-    env_cfg["episode_length_s"] = 10.0
+    env_cfg["episode_length_s"] = 5.0
 
     env = GemEnv(
         num_envs=1,
