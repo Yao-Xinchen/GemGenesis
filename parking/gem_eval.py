@@ -1,14 +1,17 @@
 import argparse
 import os
+import sys
 import pickle
 import glob
 import re
-
 import torch
-from gem_env import GemEnv
-from rsl_rl.runners import OnPolicyRunner
 
 import genesis as gs
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from rsl_rl.runners import OnPolicyRunner
+from gem_env import GemEnv
+from basic.gem_plot import GemPlot
 
 
 def main():
@@ -23,7 +26,7 @@ def main():
     log_dir = f"logs/{args.exp_name}"
     env_cfg, obs_cfg, reward_cfg, train_cfg, action_cfg = pickle.load(
         open(f"logs/{args.exp_name}/cfgs.pkl", "rb"))
-    reward_cfg["reward_scales"] = {}
+    # reward_cfg["reward_scales"] = {}
 
     # visualize the target
     env_cfg["visualize_target"] = True
@@ -71,6 +74,12 @@ def main():
 
     obs, _ = env.reset()
 
+    reward_names = list(env.reward_functions.keys())
+    sample_obs = env.get_observations()
+    obs_dim = sample_obs.shape[1]
+
+    visualizer = GemPlot(reward_names, obs_dim)
+
     max_sim_step = int(env_cfg["episode_length_s"] * env_cfg["max_visualize_FPS"] * 20)
     with torch.no_grad():
         if args.record:
@@ -84,6 +93,15 @@ def main():
             for _ in range(max_sim_step):
                 actions = policy(obs)
                 obs, _, rews, dones, infos = env.step(actions)
+
+                reward_values = {}
+                for name, reward_func in env.reward_functions.items():
+                    raw_value = reward_func()[0].item()
+                    scale = reward_cfg["reward_scales"].get(name, 1.0)  # Default to 1.0 if no scale
+                    reward_values[name] = raw_value * scale
+
+                # Update the visualization with indexed observations
+                visualizer.update(reward_values, obs)
 
 
 if __name__ == "__main__":
