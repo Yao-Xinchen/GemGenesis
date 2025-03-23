@@ -17,7 +17,7 @@ def get_train_cfg(exp_name, max_iterations):
             "entropy_coef": 0.004,
             "gamma": 0.99,
             "lam": 0.95,
-            "learning_rate": 0.0003,
+            "learning_rate": 0.0001,
             "max_grad_norm": 1.0,
             "num_learning_epochs": 5,
             "num_mini_batches": 4,
@@ -60,7 +60,7 @@ def get_cfgs():
         "num_actions": 2,
         # physics
         "base_x_range": [-8.0, 8.0],
-        "base_y_range": [3.0, 4.0],
+        "base_y_range": [3.0, 3.1],
         "base_yaw_range": [-0.25, 0.25],
         "wall_height": 1.5,
         "wall_thickness": 0.1,
@@ -90,13 +90,13 @@ def get_cfgs():
     }
     reward_cfg = {
         "reward_scales": {
-            "dist": -.3,
+            "dist": 2.,
             "alignment": 2.0,
-            "dist_y": -.6,
-            "smoothness": -0.5,
+            "dist_y": 8.,
+            "smoothness": -1.0,
             "incline": -5.0,
-            "collision": -0.1,
-            "success": 50.0,
+            # "collision": -0.001,
+            "success": 1000.0,
         },
     }
     action_cfg = {

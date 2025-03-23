@@ -100,7 +100,7 @@ class GemEnv:
         self.obstacle_left_pos = self.obstacle_left_pos.unsqueeze(0).repeat(self.num_envs, 1)
         self.obstacle_left = self.scene.add_entity(
             morph=gs.morphs.Box(
-                pos=(4.5, 0.0, 0.75),
+                pos=(5.5, 0.0, 0.75),
                 size=(4.5, 1.9, 1.5),
                 fixed=True,
                 visualization=True,
@@ -112,7 +112,7 @@ class GemEnv:
         self.obstacle_right_pos = self.obstacle_right_pos.unsqueeze(0).repeat(self.num_envs, 1)
         self.obstacle_right = self.scene.add_entity(
             morph=gs.morphs.Box(
-                pos=(-4.5, 0.0, 0.75),
+                pos=(-5.5, 0.0, 0.75),
                 size=(4.5, 1.9, 1.5),
                 fixed=True,
                 visualization=True,
@@ -132,7 +132,7 @@ class GemEnv:
         ]
         wall_poses = [
             (0, -1.5, wall_h / 2),
-            (0, 5.5, wall_h / 2),
+            (0, 4.5, wall_h / 2),
             (10, 2, wall_h / 2),
             (-10, 2, wall_h / 2),
         ]
@@ -254,6 +254,8 @@ class GemEnv:
         self.speed = actions[:, 1] * self.action_cfg["action_scales"]["velocity"]
         max_speed = self.action_cfg["action_limits"]["velocity_max"]
         self.speed = torch.clip(self.speed, -max_speed, max_speed)
+        self.speed = torch.round(self.speed)
+
         self.outputs = self.locomotion.control(steering=self.steering, velocity=self.speed)
         self.gem.control_dofs_position(self.outputs[:, :2], self.pos_idx)
         self.gem.control_dofs_velocity(self.outputs[:, 2:], self.vel_idx)
@@ -372,13 +374,13 @@ class GemEnv:
 
     # ------------ reward functions----------------
     def _reward_dist(self):
-        return torch.norm(self.rel_pos_for_gem, dim=1)
+        return (torch.norm(self.rel_pos_for_gem, dim=1) + 1.0) ** -1
 
     def _reward_alignment(self):
         return self.rel_yaw_cos_square
 
     def _reward_dist_y(self):
-        return torch.abs(self.rel_pos_for_target[:, 1])
+        return (torch.abs(self.rel_pos_for_target[:, 1]) + 1.0) ** -1
 
     def _reward_success(self):
         pos_success = ((torch.abs(self.rel_pos_for_target[:, 0]) < self.env_cfg["at_target_threshold_x"])
