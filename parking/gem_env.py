@@ -316,6 +316,7 @@ class GemEnv:
                 torch.norm(self.base_lin_vel, dim=1).unsqueeze(1) * self.obs_scales["lin_vel"],  # 1
                 self.base_ang_vel[:, 2].unsqueeze(1) * self.obs_scales["ang_vel"],  # 1
                 torch.norm(self.base_euler[:, :2], dim=1).unsqueeze(1) * self.obs_scales["base_euler"],  # 1
+                self.actions,
             ],
             dim=-1,
         )

@@ -1,7 +1,10 @@
 import argparse
 import os
+import sys
 import pickle
 import shutil
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from gem_env import GemEnv
 from rsl_rl.runners import OnPolicyRunner
@@ -79,10 +82,10 @@ def get_cfgs():
         "max_visualize_FPS": 60,
     }
     obs_cfg = {
-        "num_obs": 10,
+        "num_obs": 12,
         "obs_scales": {
             "rel_dist": 0.2,
-            "lin_vel": 0.15,
+            "lin_vel": 0.25,
             "ang_vel": 1.2,
             "rel_yaw_cos_square": 1.0,
             "base_euler": 1.0,
